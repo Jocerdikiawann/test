@@ -1,6 +1,8 @@
 package com.company.queue.registry;
 
 import com.company.queue.annotation.QueueHandler;
+import com.company.queue.consumer.DLQConsumer;
+import com.company.queue.consumer.RetryConsumer;
 import com.company.queue.service.TaskExecutor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -46,6 +48,12 @@ public class DynamicConsumerRegistry {
     @Inject
     ObjectMapper objectMapper;
 
+    @Inject
+    RetryConsumer retryConsumer;
+
+    @Inject
+    DLQConsumer dlqConsumer;
+
     @ConfigProperty(name = "kafka.bootstrap.servers")
     String bootstrapServers;
 
@@ -55,6 +63,9 @@ public class DynamicConsumerRegistry {
         scanHandlers();
         createTopics();
         startConsumers();
+
+        // Start retry & DLQ consumers SETELAH main consumers started
+        startRetryAndDLQConsumers();
 
         log.info("✅ Registry started. Handlers: {}, Consumers: {}",
             handlers.size(), consumers.size());
@@ -120,6 +131,19 @@ public class DynamicConsumerRegistry {
                 throw new RuntimeException(e);
             }
         });
+    }
+
+    private void startRetryAndDLQConsumers() {
+        try {
+            // Start retry consumer
+            retryConsumer.start();
+
+            // Start DLQ consumer
+            dlqConsumer.start();
+
+        } catch (Exception e) {
+            log.error("Failed to start retry/DLQ consumers", e);
+        }
     }
 
     private String routingKeyToTopicName(String routingKey) {

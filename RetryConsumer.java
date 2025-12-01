@@ -5,7 +5,7 @@ import com.company.queue.registry.DynamicConsumerRegistry;
 import com.company.queue.registry.HandlerMetadata;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.runtime.ShutdownEvent;
-import io.quarkus.runtime.StartupEvent;
+import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
@@ -41,37 +41,46 @@ public class RetryConsumer {
     @ConfigProperty(name = "kafka.bootstrap.servers")
     String bootstrapServers;
 
+    @ConfigProperty(name = "queue.retry.enabled", defaultValue = "true")
+    boolean enabled;
+
     private final AtomicBoolean running = new AtomicBoolean(false);
     private ExecutorService executorService;
-
-    void onStart(@Observes StartupEvent event) {
-        // Wait for registry to initialize
-        try {
-            Thread.sleep(5000);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-
-        start();
-    }
 
     void onShutdown(@Observes ShutdownEvent event) {
         stop();
     }
 
+    /**
+     * Start retry consumer setelah registry initialized
+     * Dipanggil dari DynamicConsumerRegistry setelah semua consumer started
+     */
     public void start() {
+        if (!enabled) {
+            log.info("⏭️  Retry Consumer disabled");
+            return;
+        }
+
         if (running.compareAndSet(false, true)) {
-            executorService = Executors.newFixedThreadPool(
-                registry.getAllHandlers().size()
-            );
+            int handlerCount = registry.getAllHandlers().size();
+
+            if (handlerCount == 0) {
+                log.warn("⚠️  No handlers found, retry consumer not started");
+                return;
+            }
+
+            // Gunakan minimum 1 thread, maximum sesuai handler count
+            int threadPoolSize = Math.max(1, Math.min(handlerCount, 10));
+
+            executorService = Executors.newFixedThreadPool(threadPoolSize);
 
             // Start retry consumer untuk setiap handler
             registry.getAllHandlers().values().forEach(metadata -> {
                 executorService.submit(() -> consumeRetry(metadata));
             });
 
-            log.info("✅ Retry Consumer started for {} handlers",
-                registry.getAllHandlers().size());
+            log.info("✅ Retry Consumer started with {} threads for {} handlers",
+                threadPoolSize, handlerCount);
         }
     }
 
@@ -87,14 +96,17 @@ public class RetryConsumer {
     private void consumeRetry(HandlerMetadata metadata) {
         String retryTopic = metadata.getRetryTopicName();
 
-        KafkaConsumer<String, String> consumer = createConsumer(retryTopic);
-        KafkaProducer<String, String> producer = createProducer();
-
-        consumer.subscribe(Collections.singletonList(retryTopic));
-
-        log.info("🔄 Retry consumer started for topic: {}", retryTopic);
+        KafkaConsumer<String, String> consumer = null;
+        KafkaProducer<String, String> producer = null;
 
         try {
+            consumer = createConsumer(retryTopic);
+            producer = createProducer();
+
+            consumer.subscribe(Collections.singletonList(retryTopic));
+
+            log.info("🔄 Retry consumer started for topic: {}", retryTopic);
+
             while (running.get()) {
                 ConsumerRecords<String, String> records = consumer.poll(Duration.ofSeconds(5));
 
@@ -128,15 +140,13 @@ public class RetryConsumer {
                             log.debug("⏳ Task not ready yet, delay: {}s, id={}",
                                 delaySeconds, task.getTaskId());
 
-                            // Seek back agar message ini diproses lagi nanti
                             consumer.seek(
                                 record.topicPartition(),
                                 record.offset()
                             );
 
-                            // Sleep sebentar
                             Thread.sleep(Math.min(delaySeconds * 1000, 30000));
-                            break; // Break dari for loop, poll lagi
+                            break;
                         }
 
                     } catch (Exception e) {
@@ -150,8 +160,20 @@ public class RetryConsumer {
         } catch (Exception e) {
             log.error("Error in retry consumer loop: {}", retryTopic, e);
         } finally {
-            consumer.close();
-            producer.close();
+            if (consumer != null) {
+                try {
+                    consumer.close();
+                } catch (Exception e) {
+                    log.error("Error closing consumer", e);
+                }
+            }
+            if (producer != null) {
+                try {
+                    producer.close();
+                } catch (Exception e) {
+                    log.error("Error closing producer", e);
+                }
+            }
             log.info("🛑 Retry consumer stopped: {}", retryTopic);
         }
     }
