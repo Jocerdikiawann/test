@@ -1,5 +1,6 @@
 package com.company.queue.registry;
 
+import com.company.queue.config.KafkaAdminConfig;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.apache.kafka.clients.admin.*;
@@ -18,32 +19,23 @@ public class TopicManager {
     @Inject
     AdminClient adminClient;
 
-    /**
-     * Create topic jika belum ada
-     */
+    @Inject
+    KafkaAdminConfig kafkaConfig;
+
     public void createTopicIfNotExists(HandlerMetadata metadata) {
         try {
-            // Main topic
-            createTopic(
-                metadata.getTopicName(),
-                metadata.getPartitions(),
-                metadata.getReplicationFactor()
-            );
+            // Use config values if annotation uses default
+            short replicationFactor = metadata.getReplicationFactor() == 3
+                ? kafkaConfig.getReplicationFactor()
+                : metadata.getReplicationFactor();
 
-            // Retry topic
-            createTopic(
-                metadata.getRetryTopicName(),
-                metadata.getPartitions(),
-                metadata.getReplicationFactor()
-            );
+            int partitions = metadata.getPartitions();
 
-            // DLQ topic
+            createTopic(metadata.getTopicName(), partitions, replicationFactor);
+            createTopic(metadata.getRetryTopicName(), partitions, replicationFactor);
+
             if (metadata.isEnableDLQ()) {
-                createTopic(
-                    metadata.getDLQTopicName(),
-                    metadata.getPartitions(),
-                    metadata.getReplicationFactor()
-                );
+                createTopic(metadata.getDLQTopicName(), partitions, replicationFactor);
             }
 
         } catch (Exception e) {
@@ -55,7 +47,6 @@ public class TopicManager {
     private void createTopic(String topicName, int partitions, short replicationFactor)
             throws ExecutionException, InterruptedException {
 
-        // Check if topic exists
         if (topicExists(topicName)) {
             log.debug("Topic already exists: {}", topicName);
             return;
@@ -63,11 +54,10 @@ public class TopicManager {
 
         NewTopic newTopic = new NewTopic(topicName, partitions, replicationFactor);
 
-        // Topic configs
         Map<String, String> configs = new HashMap<>();
-        configs.put("retention.ms", "604800000"); // 7 days
+        configs.put("retention.ms", "604800000");
         configs.put("compression.type", "snappy");
-        configs.put("max.message.bytes", "10485760"); // 10MB
+        configs.put("max.message.bytes", "10485760");
         newTopic.configs(configs);
 
         try {
@@ -89,23 +79,5 @@ public class TopicManager {
         ListTopicsResult topics = adminClient.listTopics();
         Set<String> topicNames = topics.names().get();
         return topicNames.contains(topicName);
-    }
-
-    /**
-     * Get topic info
-     */
-    public Map<String, TopicDescription> describeTopics(Collection<String> topicNames)
-            throws ExecutionException, InterruptedException {
-        DescribeTopicsResult result = adminClient.describeTopics(topicNames);
-        return result.all().get();
-    }
-
-    /**
-     * Delete topic (untuk testing/cleanup)
-     */
-    public void deleteTopic(String topicName) throws ExecutionException, InterruptedException {
-        DeleteTopicsResult result = adminClient.deleteTopics(Collections.singleton(topicName));
-        result.all().get();
-        log.info("🗑️ Deleted topic: {}", topicName);
     }
 }

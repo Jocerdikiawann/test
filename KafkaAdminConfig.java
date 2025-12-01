@@ -14,6 +14,12 @@ public class KafkaAdminConfig {
     @ConfigProperty(name = "kafka.bootstrap.servers")
     String bootstrapServers;
 
+    @ConfigProperty(name = "kafka.topic.replication-factor", defaultValue = "1")
+    short replicationFactor;
+
+    @ConfigProperty(name = "kafka.topic.partitions", defaultValue = "10")
+    int partitions;
+
     @Produces
     @ApplicationScoped
     public AdminClient adminClient() {
@@ -23,5 +29,13 @@ public class KafkaAdminConfig {
         props.put(AdminClientConfig.DEFAULT_API_TIMEOUT_MS_CONFIG, 60000);
 
         return AdminClient.create(props);
+    }
+
+    public short getReplicationFactor() {
+        return replicationFactor;
+    }
+
+    public int getPartitions() {
+        return partitions;
     }
 }
