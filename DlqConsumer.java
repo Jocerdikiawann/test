@@ -6,7 +6,6 @@ import com.company.queue.registry.HandlerMetadata;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.quarkus.runtime.ShutdownEvent;
-import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
@@ -42,38 +41,41 @@ public class DLQConsumer {
     @ConfigProperty(name = "kafka.bootstrap.servers")
     String bootstrapServers;
 
+    @ConfigProperty(name = "queue.dlq.enabled", defaultValue = "true")
+    boolean enabled;
+
     private final AtomicBoolean running = new AtomicBoolean(false);
     private ExecutorService executorService;
-
-    void onStart(@Observes StartupEvent event) {
-        // Wait for registry
-        try {
-            Thread.sleep(5000);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-
-        start();
-    }
 
     void onShutdown(@Observes ShutdownEvent event) {
         stop();
     }
 
     public void start() {
-        if (running.compareAndSet(false, true)) {
-            executorService = Executors.newFixedThreadPool(
-                registry.getAllHandlers().size()
-            );
+        if (!enabled) {
+            log.info("DLQ Consumer disabled");
+            return;
+        }
 
-            // Start DLQ consumer untuk setiap handler
+        if (running.compareAndSet(false, true)) {
+            int handlerCount = registry.getAllHandlers().size();
+
+            if (handlerCount == 0) {
+                log.warn("No handlers found, DLQ consumer not started");
+                return;
+            }
+
+            int threadPoolSize = Math.max(1, Math.min(handlerCount, 10));
+
+            executorService = Executors.newFixedThreadPool(threadPoolSize);
+
             registry.getAllHandlers().values().forEach(metadata -> {
                 if (metadata.isEnableDLQ()) {
                     executorService.submit(() -> consumeDLQ(metadata));
                 }
             });
 
-            log.info("✅ DLQ Consumer started");
+            log.info("DLQ Consumer started with {} threads", threadPoolSize);
         }
     }
 
@@ -81,7 +83,7 @@ public class DLQConsumer {
         if (running.compareAndSet(true, false)) {
             if (executorService != null) {
                 executorService.shutdown();
-                log.info("🛑 DLQ Consumer stopped");
+                log.info("DLQ Consumer stopped");
             }
         }
     }
@@ -89,12 +91,14 @@ public class DLQConsumer {
     private void consumeDLQ(HandlerMetadata metadata) {
         String dlqTopic = metadata.getDLQTopicName();
 
-        KafkaConsumer<String, String> consumer = createConsumer(dlqTopic);
-        consumer.subscribe(Collections.singletonList(dlqTopic));
-
-        log.info("💀 DLQ consumer started for topic: {}", dlqTopic);
+        KafkaConsumer<String, String> consumer = null;
 
         try {
+            consumer = createConsumer(dlqTopic);
+            consumer.subscribe(Collections.singletonList(dlqTopic));
+
+            log.info("DLQ consumer started for topic: {}", dlqTopic);
+
             while (running.get()) {
                 ConsumerRecords<String, String> records = consumer.poll(Duration.ofSeconds(5));
 
@@ -105,13 +109,11 @@ public class DLQConsumer {
                             TaskPayload.class
                         );
 
-                        // Extract error info from headers
                         String errorMessage = getHeaderValue(record, "error-message");
                         String errorClass = getHeaderValue(record, "error-class");
                         String failedAt = getHeaderValue(record, "failed-at");
 
-                        // Log DLQ message
-                        log.error("💀 DLQ Message: " +
+                        log.error("DLQ Message: " +
                             "\n  Task ID: {}" +
                             "\n  Routing: {}" +
                             "\n  Retry Count: {}" +
@@ -128,17 +130,10 @@ public class DLQConsumer {
                             objectMapper.writeValueAsString(task.getData())
                         );
 
-                        // Metrics
                         meterRegistry.counter("dlq.messages",
                             "routing", task.getRoutingKey(),
                             "error_class", errorClass != null ? errorClass : "unknown"
                         ).increment();
-
-                        // TODO: Simpan ke database untuk manual investigation
-                        // saveToDLQDatabase(task, errorMessage, errorClass);
-
-                        // TODO: Send alert/notification
-                        // sendDLQAlert(task, errorMessage);
 
                     } catch (Exception e) {
                         log.error("Error processing DLQ message", e);
@@ -151,8 +146,14 @@ public class DLQConsumer {
         } catch (Exception e) {
             log.error("Error in DLQ consumer loop: {}", dlqTopic, e);
         } finally {
-            consumer.close();
-            log.info("🛑 DLQ consumer stopped: {}", dlqTopic);
+            if (consumer != null) {
+                try {
+                    consumer.close();
+                } catch (Exception e) {
+                    log.error("Error closing consumer", e);
+                }
+            }
+            log.info("DLQ consumer stopped: {}", dlqTopic);
         }
     }
 
