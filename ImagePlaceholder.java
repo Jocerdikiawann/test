@@ -132,6 +132,7 @@ public class ImagePlaceholderService {
 
     /**
      * Create run dengan image
+     * UPDATED: Proper sizing & wrap behind text support
      */
     private R createImageRun(
             WordprocessingMLPackage wordMLPackage,
@@ -149,32 +150,234 @@ public class ImagePlaceholderService {
             imageBytes
         );
 
-        // Calculate dimensions
-        int imageWidth = imageData.getWidthEMU();
-        int imageHeight = imageData.getHeightEMU();
-
-        // Create inline image
-        Inline inline = imagePart.createImageInline(
-            imageData.getFilename(),
-            imageData.getAltText(),
-            0, // id
-            1, // id
-            false
+        // Get actual image dimensions
+        java.awt.image.BufferedImage img = javax.imageio.ImageIO.read(
+            new java.io.ByteArrayInputStream(imageBytes)
         );
 
-        // Set size
-        inline.getExtent().setCx(imageWidth);
-        inline.getExtent().setCy(imageHeight);
+        int actualWidth = img.getWidth();
+        int actualHeight = img.getHeight();
 
-        // Create drawing
-        Drawing drawing = factory.createDrawing();
-        drawing.getAnchorOrInline().add(inline);
+        // Calculate target dimensions maintaining aspect ratio
+        int targetWidth = imageData.getWidthPixels();
+        int targetHeight = imageData.getHeightPixels();
+
+        if (imageData.isMaintainAspectRatio()) {
+            // Calculate aspect ratio
+            double aspectRatio = (double) actualWidth / actualHeight;
+
+            // Fit within target dimensions
+            if (targetWidth / aspectRatio <= targetHeight) {
+                targetHeight = (int) (targetWidth / aspectRatio);
+            } else {
+                targetWidth = (int) (targetHeight * aspectRatio);
+            }
+        }
+
+        // Convert to EMU
+        int imageWidthEMU = targetWidth * 9525;
+        int imageHeightEMU = targetHeight * 9525;
 
         // Create run
         R run = factory.createR();
-        run.getContent().add(drawing);
+
+        if (imageData.getWrapStyle() == WrapStyle.BEHIND_TEXT ||
+            imageData.getWrapStyle() == WrapStyle.IN_FRONT_OF_TEXT) {
+            // Use ANCHOR for behind/in-front text wrapping
+            org.docx4j.dml.wordprocessingDrawing.Anchor anchor =
+                createAnchoredImage(
+                    wordMLPackage,
+                    imagePart,
+                    imageData,
+                    imageWidthEMU,
+                    imageHeightEMU
+                );
+
+            Drawing drawing = factory.createDrawing();
+            drawing.getAnchorOrInline().add(anchor);
+            run.getContent().add(drawing);
+        } else {
+            // Use INLINE for normal inline wrapping
+            Inline inline = imagePart.createImageInline(
+                imageData.getFilename(),
+                imageData.getAltText(),
+                0,
+                1,
+                false
+            );
+
+            // Set size
+            inline.getExtent().setCx(imageWidthEMU);
+            inline.getExtent().setCy(imageHeightEMU);
+
+            Drawing drawing = factory.createDrawing();
+            drawing.getAnchorOrInline().add(inline);
+            run.getContent().add(drawing);
+        }
 
         return run;
+    }
+
+    /**
+     * Create anchored image (for behind text / in front of text)
+     */
+    private org.docx4j.dml.wordprocessingDrawing.Anchor createAnchoredImage(
+            WordprocessingMLPackage wordMLPackage,
+            BinaryPartAbstractImage imagePart,
+            ImageData imageData,
+            int widthEMU,
+            int heightEMU
+    ) throws Exception {
+
+        org.docx4j.dml.wordprocessingDrawing.Anchor anchor =
+            new org.docx4j.dml.wordprocessingDrawing.Anchor();
+
+        // Set dimensions
+        anchor.setDistT(0L);
+        anchor.setDistB(0L);
+        anchor.setDistL(0L);
+        anchor.setDistR(0L);
+
+        anchor.setSimplePos(false);
+        anchor.setRelativeHeight(imageData.getZIndex());
+        anchor.setAllowOverlap(true);
+        anchor.setBehindDoc(imageData.getWrapStyle() == WrapStyle.BEHIND_TEXT);
+        anchor.setLocked(false);
+        anchor.setLayoutInCell(true);
+
+        // Simple position
+        org.docx4j.dml.wordprocessingDrawing.CTSimplePos simplePos =
+            new org.docx4j.dml.wordprocessingDrawing.CTSimplePos();
+        simplePos.setX(0L);
+        simplePos.setY(0L);
+        anchor.setSimplePos2(simplePos);
+
+        // Horizontal positioning
+        org.docx4j.dml.wordprocessingDrawing.CTPosH posH =
+            new org.docx4j.dml.wordprocessingDrawing.CTPosH();
+        posH.setRelativeFrom(
+            org.docx4j.dml.wordprocessingDrawing.STRelFromH.COLUMN
+        );
+        org.docx4j.dml.wordprocessingDrawing.CTPosH.PosOffset posOffsetH =
+            new org.docx4j.dml.wordprocessingDrawing.CTPosH.PosOffset();
+        posOffsetH.setValue(imageData.getOffsetX());
+        posH.setPosOffset(posOffsetH);
+        anchor.setPositionH(posH);
+
+        // Vertical positioning
+        org.docx4j.dml.wordprocessingDrawing.CTPosV posV =
+            new org.docx4j.dml.wordprocessingDrawing.CTPosV();
+        posV.setRelativeFrom(
+            org.docx4j.dml.wordprocessingDrawing.STRelFromV.PARAGRAPH
+        );
+        org.docx4j.dml.wordprocessingDrawing.CTPosV.PosOffset posOffsetV =
+            new org.docx4j.dml.wordprocessingDrawing.CTPosV.PosOffset();
+        posOffsetV.setValue(imageData.getOffsetY());
+        posV.setPosOffset(posOffsetV);
+        anchor.setPositionV(posV);
+
+        // Extent
+        org.docx4j.dml.wordprocessingDrawing.CTPositiveSize2D extent =
+            new org.docx4j.dml.wordprocessingDrawing.CTPositiveSize2D();
+        extent.setCx(widthEMU);
+        extent.setCy(heightEMU);
+        anchor.setExtent(extent);
+
+        // Effect extent (no effects)
+        org.docx4j.dml.CTEffectExtent effectExtent =
+            new org.docx4j.dml.CTEffectExtent();
+        effectExtent.setL(0L);
+        effectExtent.setT(0L);
+        effectExtent.setR(0L);
+        effectExtent.setB(0L);
+        anchor.setEffectExtent(effectExtent);
+
+        // Wrap style
+        if (imageData.getWrapStyle() == WrapStyle.BEHIND_TEXT) {
+            org.docx4j.dml.wordprocessingDrawing.CTWrapNone wrapNone =
+                new org.docx4j.dml.wordprocessingDrawing.CTWrapNone();
+            anchor.setWrapNone(wrapNone);
+        } else {
+            org.docx4j.dml.wordprocessingDrawing.CTWrapSquare wrapSquare =
+                new org.docx4j.dml.wordprocessingDrawing.CTWrapSquare();
+            wrapSquare.setWrapText(
+                org.docx4j.dml.wordprocessingDrawing.STWrapText.BOTH_SIDES
+            );
+            anchor.setWrapSquare(wrapSquare);
+        }
+
+        // Doc properties
+        org.docx4j.dml.wordprocessingDrawing.CTNonVisualDrawingProps docPr =
+            new org.docx4j.dml.wordprocessingDrawing.CTNonVisualDrawingProps();
+        docPr.setId(1L);
+        docPr.setName(imageData.getFilename());
+        docPr.setDescr(imageData.getAltText());
+        anchor.setDocPr(docPr);
+
+        // Graphic
+        org.docx4j.dml.Graphic graphic = new org.docx4j.dml.Graphic();
+        org.docx4j.dml.GraphicData graphicData = new org.docx4j.dml.GraphicData();
+        graphicData.setUri("http://schemas.openxmlformats.org/drawingml/2006/picture");
+
+        org.docx4j.dml.picture.Pic pic = new org.docx4j.dml.picture.Pic();
+
+        // Non-visual properties
+        org.docx4j.dml.picture.Pic.NvPicPr nvPicPr =
+            new org.docx4j.dml.picture.Pic.NvPicPr();
+        org.docx4j.dml.picture.CTPictureNonVisual cNvPicPr =
+            new org.docx4j.dml.picture.CTPictureNonVisual();
+        cNvPicPr.setId(0L);
+        cNvPicPr.setName(imageData.getFilename());
+        nvPicPr.setCNvPicPr(cNvPicPr);
+
+        org.docx4j.dml.CTNonVisualDrawingProps cNvPr =
+            new org.docx4j.dml.CTNonVisualDrawingProps();
+        cNvPr.setId(0L);
+        cNvPr.setName(imageData.getFilename());
+        nvPicPr.setCNvPr(cNvPr);
+        pic.setNvPicPr(nvPicPr);
+
+        // Blip fill
+        org.docx4j.dml.picture.Pic.BlipFill blipFill =
+            new org.docx4j.dml.picture.Pic.BlipFill();
+        org.docx4j.dml.CTBlip blip = new org.docx4j.dml.CTBlip();
+        blip.setEmbed(imagePart.getRelationshipType());
+        blipFill.setBlip(blip);
+
+        org.docx4j.dml.CTStretchInfoProperties stretch =
+            new org.docx4j.dml.CTStretchInfoProperties();
+        org.docx4j.dml.CTRelativeRect fillRect = new org.docx4j.dml.CTRelativeRect();
+        stretch.setFillRect(fillRect);
+        blipFill.setStretch(stretch);
+        pic.setBlipFill(blipFill);
+
+        // Shape properties
+        org.docx4j.dml.picture.Pic.SpPr spPr = new org.docx4j.dml.picture.Pic.SpPr();
+        org.docx4j.dml.CTTransform2D xfrm = new org.docx4j.dml.CTTransform2D();
+        org.docx4j.dml.CTPoint2D off = new org.docx4j.dml.CTPoint2D();
+        off.setX(0L);
+        off.setY(0L);
+        xfrm.setOff(off);
+
+        org.docx4j.dml.CTPositiveSize2D ext = new org.docx4j.dml.CTPositiveSize2D();
+        ext.setCx(widthEMU);
+        ext.setCy(heightEMU);
+        xfrm.setExt(ext);
+        spPr.setXfrm(xfrm);
+
+        org.docx4j.dml.CTPresetGeometry2D prstGeom =
+            new org.docx4j.dml.CTPresetGeometry2D();
+        prstGeom.setPrst(org.docx4j.dml.STShapeType.RECT);
+        spPr.setPrstGeom(prstGeom);
+        pic.setSpPr(spPr);
+
+        graphicData.getAny().add(
+            new org.docx4j.jaxb.Context().getWmlObjectFactory().createPic(pic)
+        );
+        graphic.setGraphicData(graphicData);
+        anchor.setGraphic(graphic);
+
+        return anchor;
     }
 
     /**
@@ -223,7 +426,7 @@ public class ImagePlaceholderService {
     }
 
     /**
-     * Image data class
+     * Image data class with wrap style support
      */
     public static class ImageData {
         private byte[] bytes;
@@ -231,12 +434,16 @@ public class ImagePlaceholderService {
         private String altText;
         private int widthPixels;
         private int heightPixels;
+        private boolean maintainAspectRatio = true;
+        private WrapStyle wrapStyle = WrapStyle.INLINE;
+        private int zIndex = 251658240; // Default behind text
+        private long offsetX = 0L;
+        private long offsetY = 0L;
 
         public ImageData(byte[] bytes) {
             this.bytes = bytes;
             this.filename = "image.png";
             this.altText = "Image";
-            // Default size: 200x100 pixels
             this.widthPixels = 200;
             this.heightPixels = 100;
         }
@@ -274,8 +481,13 @@ public class ImagePlaceholderService {
         public String getAltText() { return altText; }
         public int getWidthPixels() { return widthPixels; }
         public int getHeightPixels() { return heightPixels; }
+        public boolean isMaintainAspectRatio() { return maintainAspectRatio; }
+        public WrapStyle getWrapStyle() { return wrapStyle; }
+        public int getZIndex() { return zIndex; }
+        public long getOffsetX() { return offsetX; }
+        public long getOffsetY() { return offsetY; }
 
-        // Setters for fluent API
+        // Fluent setters
         public ImageData filename(String filename) {
             this.filename = filename;
             return this;
@@ -291,5 +503,63 @@ public class ImagePlaceholderService {
             this.heightPixels = heightPixels;
             return this;
         }
+
+        public ImageData maintainAspectRatio(boolean maintain) {
+            this.maintainAspectRatio = maintain;
+            return this;
+        }
+
+        /**
+         * Set wrap style to BEHIND_TEXT (image dibelakang text)
+         */
+        public ImageData behindText() {
+            this.wrapStyle = WrapStyle.BEHIND_TEXT;
+            return this;
+        }
+
+        /**
+         * Set wrap style to IN_FRONT_OF_TEXT
+         */
+        public ImageData inFrontOfText() {
+            this.wrapStyle = WrapStyle.IN_FRONT_OF_TEXT;
+            return this;
+        }
+
+        /**
+         * Set wrap style to INLINE (default)
+         */
+        public ImageData inline() {
+            this.wrapStyle = WrapStyle.INLINE;
+            return this;
+        }
+
+        public ImageData wrapStyle(WrapStyle wrapStyle) {
+            this.wrapStyle = wrapStyle;
+            return this;
+        }
+
+        public ImageData zIndex(int zIndex) {
+            this.zIndex = zIndex;
+            return this;
+        }
+
+        public ImageData offset(long x, long y) {
+            this.offsetX = x;
+            this.offsetY = y;
+            return this;
+        }
+    }
+
+    /**
+     * Wrap style enum
+     */
+    public enum WrapStyle {
+        INLINE,           // Normal inline (default)
+        BEHIND_TEXT,      // Behind text (watermark-like)
+        IN_FRONT_OF_TEXT, // In front of text
+        SQUARE,           // Text wraps around square
+        TIGHT,            // Text wraps tight
+        THROUGH,          // Text flows through
+        TOP_AND_BOTTOM    // Text above and below only
     }
 }
