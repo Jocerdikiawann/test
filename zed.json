@@ -23,15 +23,30 @@
     }
   },
 
-  // LSP Configuration untuk Java
+  // LSP Configuration dengan Cache Settings
   "lsp": {
     "jdtls": {
       "initialization_options": {
         "bundles": [],
-        "workspaceFolders": [],
+        "extendedClientCapabilities": {
+          "progressReportProvider": true,
+          "classFileContentsSupport": true,
+          "generateToStringPromptSupport": true,
+          "hashCodeEqualsPromptSupport": true,
+          "advancedExtractRefactoringSupport": true,
+          "advancedOrganizeImportsSupport": true,
+          "generateConstructorsPromptSupport": true,
+          "generateDelegateMethodsPromptSupport": true,
+          "advancedGenerateAccessorsSupport": true
+        },
         "settings": {
           "java": {
             "home": null,
+            "jdt": {
+              "ls": {
+                "vmargs": "-XX:+UseParallelGC -XX:GCTimeRatio=4 -XX:AdaptiveSizePolicyWeight=90 -Dsun.zip.disableMemoryMapping=true -Xmx2G -Xms100m"
+              }
+            },
             "errors": {
               "incompleteClasspath": {
                 "severity": "warning"
@@ -40,25 +55,19 @@
             "configuration": {
               "updateBuildConfiguration": "automatic",
               "maven": {
-                "downloadSources": true
+                "downloadSources": true,
+                "updateSnapshots": false
               }
             },
-            "trace": {
-              "server": "off"
+            "maven": {
+              "downloadSources": true,
+              "updateSnapshots": false
             },
-            "import": {
-              "gradle": {
-                "enabled": true
-              },
-              "maven": {
-                "enabled": true
-              },
-              "exclusions": [
-                "**/node_modules/**",
-                "**/.metadata/**",
-                "**/archetype-resources/**",
-                "**/target/**"
-              ]
+            "eclipse": {
+              "downloadSources": true
+            },
+            "gradle": {
+              "downloadSources": true
             },
             "referencesCodeLens": {
               "enabled": true
@@ -67,30 +76,143 @@
               "enabled": true
             },
             "signatureHelp": {
-              "enabled": true
+              "enabled": true,
+              "description": {
+                "enabled": true
+              }
+            },
+            "import": {
+              "gradle": {
+                "enabled": true,
+                "wrapper": {
+                  "enabled": true
+                },
+                "version": null,
+                "home": null,
+                "java": {
+                  "home": null
+                },
+                "offline": {
+                  "enabled": false
+                },
+                "arguments": null,
+                "jvmArguments": null,
+                "user": {
+                  "home": null
+                }
+              },
+              "maven": {
+                "enabled": true,
+                "offline": {
+                  "enabled": false
+                }
+              },
+              "exclusions": [
+                "**/node_modules/**",
+                "**/.metadata/**",
+                "**/archetype-resources/**",
+                "**/target/**",
+                "**/build/**"
+              ]
+            },
+            "completion": {
+              "enabled": true,
+              "guessMethodArguments": true,
+              "favoriteStaticMembers": [
+                "org.junit.Assert.*",
+                "org.junit.jupiter.api.Assertions.*",
+                "org.junit.Assume.*",
+                "org.hamcrest.MatcherAssert.assertThat",
+                "org.hamcrest.Matchers.*",
+                "org.hamcrest.CoreMatchers.*",
+                "org.mockito.Mockito.*",
+                "org.mockito.ArgumentMatchers.*",
+                "org.mockito.Answers.*"
+              ],
+              "filteredTypes": [
+                "java.awt.*",
+                "com.sun.*",
+                "sun.*",
+                "jdk.*",
+                "org.graalvm.*",
+                "io.micrometer.shaded.*"
+              ],
+              "importOrder": ["java", "javax", "org", "com"],
+              "maxResults": 50,
+              "overwrite": true,
+              "chain": {
+                "enabled": true
+              }
             },
             "contentProvider": {
               "preferred": "fernflower"
             },
-            "completion": {
-              "filteredTypes": ["java.awt.*", "com.sun.*"],
-              "favoriteStaticMembers": [
-                "org.junit.Assert.*",
-                "org.junit.jupiter.api.Assertions.*",
-                "org.mockito.Mockito.*"
-              ]
+            "autobuild": {
+              "enabled": true
+            },
+            "maxConcurrentBuilds": 1,
+            "recommendations": {
+              "dependency": {
+                "analytics": {
+                  "show": false
+                }
+              }
+            },
+            "references": {
+              "includeAccessors": true,
+              "includeDecompiledSources": true
+            },
+            "format": {
+              "enabled": true,
+              "settings": {
+                "url": null,
+                "profile": null
+              },
+              "comments": {
+                "enabled": true
+              },
+              "onType": {
+                "enabled": true
+              }
+            },
+            "saveActions": {
+              "organizeImports": true
+            },
+            "project": {
+              "referencedLibraries": ["lib/**/*.jar"]
+            },
+            "codeGeneration": {
+              "hashCodeEquals": {
+                "useJava7Objects": true,
+                "useInstanceof": true
+              },
+              "useBlocks": true,
+              "generateComments": false,
+              "toString": {
+                "template": "${object.className} [${member.name()}=${member.value}, ${otherMembers}]",
+                "codeStyle": "STRING_CONCATENATION",
+                "skipNullValues": false,
+                "listArrayContents": true,
+                "limitElements": 0
+              },
+              "insertionLocation": "afterCursor"
+            },
+            "selectionRange": {
+              "enabled": true
+            },
+            "showBuildStatusOnStart": {
+              "enabled": "notification"
+            },
+            "compile": {
+              "nullAnalysis": {
+                "mode": "automatic"
+              }
             },
             "sources": {
               "organizeImports": {
                 "starThreshold": 5,
                 "staticStarThreshold": 3
               }
-            },
-            "codeGeneration": {
-              "toString": {
-                "template": "${object.className} [${member.name()}=${member.value}, ${otherMembers}]"
-              },
-              "useBlocks": true
             }
           }
         }
@@ -98,32 +220,18 @@
     }
   },
 
-  // Go-to-definition behavior - ini yang penting buat masalah kamu
-  "project_panel": {
-    "dock": "left",
-    "default_width": 240
-  },
-
   // Inlay hints
   "inlay_hints": {
     "enabled": true,
     "show_type_hints": true,
-    "show_parameter_hints": true
+    "show_parameter_hints": true,
+    "show_other_hints": true
   },
 
   // Auto-save
   "autosave": "on_focus_change",
 
-  // Terminal
-  "terminal": {
-    "shell": {
-      "program": "bash"
-    },
-    "font_family": "JetBrains Mono",
-    "font_size": 13
-  },
-
-  // File handling
+  // File handling dengan exclusions
   "file_scan_exclusions": [
     "**/.git",
     "**/.svn",
@@ -140,8 +248,16 @@
     "**/out",
     "**/bin",
     "**/.idea",
-    "**/node_modules"
+    "**/node_modules",
+    "**/.gradle",
+    "**/.m2"
   ],
+
+  // Project panel
+  "project_panel": {
+    "dock": "left",
+    "default_width": 240
+  },
 
   // Git
   "git": {
@@ -150,7 +266,16 @@
     }
   },
 
-  // Telemetry (optional)
+  // Terminal
+  "terminal": {
+    "shell": {
+      "program": "bash"
+    },
+    "font_family": "JetBrains Mono",
+    "font_size": 13
+  },
+
+  // Telemetry
   "telemetry": {
     "diagnostics": false,
     "metrics": false
