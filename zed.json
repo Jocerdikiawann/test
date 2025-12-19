@@ -1,0 +1,158 @@
+{
+  // Editor Basics
+  "theme": "One Dark",
+  "buffer_font_family": "JetBrains Mono",
+  "buffer_font_size": 14,
+  "ui_font_size": 14,
+  "tab_size": 4,
+  "soft_wrap": "none",
+  "show_whitespaces": "selection",
+  "ensure_final_newline_on_save": true,
+  "remove_trailing_whitespace_on_save": true,
+
+  // Java Specific
+  "languages": {
+    "Java": {
+      "tab_size": 4,
+      "hard_tabs": false,
+      "format_on_save": "on",
+      "formatter": "language_server",
+      "code_actions_on_format": {
+        "source.organizeImports": true
+      }
+    }
+  },
+
+  // LSP Configuration untuk Java
+  "lsp": {
+    "jdtls": {
+      "initialization_options": {
+        "bundles": [],
+        "workspaceFolders": [],
+        "settings": {
+          "java": {
+            "home": null,
+            "errors": {
+              "incompleteClasspath": {
+                "severity": "warning"
+              }
+            },
+            "configuration": {
+              "updateBuildConfiguration": "automatic",
+              "maven": {
+                "downloadSources": true
+              }
+            },
+            "trace": {
+              "server": "off"
+            },
+            "import": {
+              "gradle": {
+                "enabled": true
+              },
+              "maven": {
+                "enabled": true
+              },
+              "exclusions": [
+                "**/node_modules/**",
+                "**/.metadata/**",
+                "**/archetype-resources/**",
+                "**/target/**"
+              ]
+            },
+            "referencesCodeLens": {
+              "enabled": true
+            },
+            "implementationsCodeLens": {
+              "enabled": true
+            },
+            "signatureHelp": {
+              "enabled": true
+            },
+            "contentProvider": {
+              "preferred": "fernflower"
+            },
+            "completion": {
+              "filteredTypes": ["java.awt.*", "com.sun.*"],
+              "favoriteStaticMembers": [
+                "org.junit.Assert.*",
+                "org.junit.jupiter.api.Assertions.*",
+                "org.mockito.Mockito.*"
+              ]
+            },
+            "sources": {
+              "organizeImports": {
+                "starThreshold": 5,
+                "staticStarThreshold": 3
+              }
+            },
+            "codeGeneration": {
+              "toString": {
+                "template": "${object.className} [${member.name()}=${member.value}, ${otherMembers}]"
+              },
+              "useBlocks": true
+            }
+          }
+        }
+      }
+    }
+  },
+
+  // Go-to-definition behavior - ini yang penting buat masalah kamu
+  "project_panel": {
+    "dock": "left",
+    "default_width": 240
+  },
+
+  // Inlay hints
+  "inlay_hints": {
+    "enabled": true,
+    "show_type_hints": true,
+    "show_parameter_hints": true
+  },
+
+  // Auto-save
+  "autosave": "on_focus_change",
+
+  // Terminal
+  "terminal": {
+    "shell": {
+      "program": "bash"
+    },
+    "font_family": "JetBrains Mono",
+    "font_size": 13
+  },
+
+  // File handling
+  "file_scan_exclusions": [
+    "**/.git",
+    "**/.svn",
+    "**/.hg",
+    "**/CVS",
+    "**/.DS_Store",
+    "**/Thumbs.db",
+    "**/.classpath",
+    "**/.project",
+    "**/.settings",
+    "**/.factorypath",
+    "**/target",
+    "**/build",
+    "**/out",
+    "**/bin",
+    "**/.idea",
+    "**/node_modules"
+  ],
+
+  // Git
+  "git": {
+    "inline_blame": {
+      "enabled": true
+    }
+  },
+
+  // Telemetry (optional)
+  "telemetry": {
+    "diagnostics": false,
+    "metrics": false
+  }
+}
