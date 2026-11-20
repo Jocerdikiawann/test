@@ -1,0 +1,44 @@
+# IMPORTANT: Ganti type file jadi .ps1
+# Dan running di powershell dengan .jiggler.ps1
+$wsh = New-Object -ComObject WScript.Shell
+
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+
+public class UserActivity {
+    [StructLayout(LayoutKind.Sequential)]
+    public struct LASTINPUTINFO {
+        public uint cbSize;
+        public uint dwTime;
+    }
+
+    [DllImport("user32.dll")]
+    public static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
+
+    public static uint GetIdleTime() {
+        LASTINPUTINFO lastInput = new LASTINPUTINFO();
+        lastInput.cbSize = (uint)Marshal.SizeOf(lastInput);
+        GetLastInputInfo(ref lastInput);
+        return ((uint)Environment.TickCount - lastInput.dwTime) / 1000;
+    }
+}
+"@
+
+$batasIdle = 30
+
+Write-Host "Script Keep-Active Teams berjalan..." -ForegroundColor Green
+Write-Host "Akan mengirim sinyal aktif jika tidak ada aktivitas selama $batasIdle detik." -ForegroundColor Cyan
+Write-Host "Tekan Ctrl + C di jendela ini untuk berhenti.`n" -ForegroundColor Yellow
+
+while ($true) {
+    $idleSeconds = [UserActivity]::GetIdleTime()
+    
+    if ($idleSeconds -ge $batasIdle) {
+        $wsh.SendKeys('{F15}')
+        
+        Write-Host "$(Get-Date -Format 'HH:mm:ss') - Idle terdeteksi ($idleSeconds dtk). Sinyal F15 dikirim!" -ForegroundColor Magenta
+    }
+    
+    Start-Sleep -Seconds 1
+}
